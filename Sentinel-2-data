@@ -1,0 +1,323 @@
+!pip install earthengine-api folium
+
+import ee
+import folium
+from google.colab import drive
+
+# Authenticate to Google Earth Engine
+ee.Authenticate()
+
+# Initialize the Earth Engine module
+ee.Initialize(project='ee-shreyak2703')
+
+# Mount Google Drive to save the exported files
+drive.mount('/content/drive')
+
+# Define an area of interest for Mumbai, India
+aoi = ee.Geometry.Point([72.8777, 19.0760])
+
+# Filter the Sentinel-2 collection
+sentinel2 = ee.ImageCollection('COPERNICUS/S2') \
+             .filterBounds(aoi) \
+             .filterDate('2023-01-01', '2023-01-31') \
+             .sort('CLOUD_COVER')
+
+# Get the least cloudy image
+image = sentinel2.first()
+
+# Select bands for NDWI calculation
+green_band = image.select('B3')
+nir_band = image.select('B8')
+
+# Calculate NDWI
+ndwi = green_band.subtract(nir_band).divide(green_band.add(nir_band)).rename('NDWI')
+
+# Define visualization parameters
+ndwi_vis_params = {
+    'min': -1,
+    'max': 1,
+    'palette': ['blue', 'white', 'green']
+}
+
+# Define a function to add Earth Engine layers to a Folium map
+def add_ee_layer(self, ee_image_object, vis_params, name):
+    map_id_dict = ee.Image(ee_image_object).getMapId(vis_params)
+    folium.raster_layers.TileLayer(
+        tiles=map_id_dict['tile_fetcher'].url_format,
+        attr='Map Data &copy; <a href="https://earthengine.google.com/">Google Earth Engine</a>',
+        name=name,
+        overlay=True,
+        control=True
+    ).add_to(self)
+
+# Add EE drawing method to folium.
+folium.Map.add_ee_layer = add_ee_layer
+
+# Create a map centered at the AOI
+map_ndwi = folium.Map(location=[19.0760, 72.8777], zoom_start=10)
+map_ndwi.add_ee_layer(ndwi, ndwi_vis_params, 'NDWI')
+map_ndwi.add_child(folium.LayerControl())
+
+# Display the map
+map_ndwi
+
+
+# Export the NDWI image to Google Drive
+export_task = ee.batch.Export.image.toDrive(
+    image=ndwi,
+    description='NDWI_Mumbai_Jan2023',
+    folder='EarthEngineImages',  # Make sure this folder exists in your Google Drive
+    scale=10,
+    region=aoi.buffer(10000).bounds().getInfo()['coordinates']
+)
+export_task.start()
+
+print("Exporting NDWI image to Google Drive. Task ID: {}".format(export_task.id))
+
+!pip install earthengine-api folium geemap
+
+import folium
+import geemap.foliumap as geemap
+
+# Define the AOI for Mumbai using a bounding box.
+mumbai_aoi = ee.Geometry.Rectangle([72.775, 18.875, 72.985, 19.255])
+
+# Filter the Sentinel-2 collection.
+sentinel2 = ee.ImageCollection('COPERNICUS/S2') \
+             .filterBounds(mumbai_aoi) \
+             .filterDate('2023-01-01', '2023-01-31') \
+             .sort('CLOUD_COVER')
+
+# Get the least cloudy image.
+image = sentinel2.first()
+
+# Define the bands for NDCI calculation.
+red_edge_band = image.select('B5')
+red_band = image.select('B4')
+
+# Calculate NDCI.
+ndci = red_edge_band.subtract(red_band).divide(red_edge_band.add(red_band)).rename('NDCI')
+
+# Visualize the NDCI.
+map_ndci = geemap.Map(center=[19.0760, 72.8777], zoom=10)
+map_ndci.addLayer(ndci, {'min': -1, 'max': 1, 'palette': ['blue', 'white', 'green']}, 'NDCI')
+map_ndci.add_child(folium.LayerControl())
+map_ndci
+
+# Define the bands for NDVI calculation.
+nir_band = image.select('B8')
+red_band = image.select('B4')
+
+# Calculate NDVI.
+ndvi = nir_band.subtract(red_band).divide(nir_band.add(red_band)).rename('NDVI')
+
+# Visualize the NDVI.
+map_ndvi = geemap.Map(center=[19.0760, 72.8777], zoom=10)
+map_ndvi.addLayer(ndvi, {'min': -1, 'max': 1, 'palette': ['brown', 'white', 'green']}, 'NDVI')
+map_ndvi.add_child(folium.LayerControl())
+map_ndvi
+
+# Define the bands for NDWI calculation.
+green_band = image.select('B3')
+nir_band = image.select('B8')
+
+# Calculate NDWI.
+ndwi = green_band.subtract(nir_band).divide(green_band.add(nir_band)).rename('NDWI')
+
+# Visualize the NDWI.
+map_ndwi = geemap.Map(center=[19.0760, 72.8777], zoom=10)
+map_ndwi.addLayer(ndwi, {'min': -1, 'max': 1, 'palette': ['blue', 'white']}, 'NDWI')
+map_ndwi.add_child(folium.LayerControl())
+map_ndwi
+
+!pip install earthengine-api folium geemap matplotlib
+
+import ee
+import folium
+import geemap.foliumap as geemap
+import matplotlib.pyplot as plt
+import pandas as pd
+
+# Define the AOI for Mumbai using a bounding box.
+mumbai_aoi = ee.Geometry.Rectangle([72.775, 18.875, 72.985, 19.255])
+
+# Function to calculate NDCI, NDWI, and NDVI.
+def calculate_indices(image):
+    red_edge_band = image.select('B5')
+    red_band = image.select('B4')
+    green_band = image.select('B3')
+    nir_band = image.select('B8')
+
+    # Calculate NDCI
+    ndci = red_edge_band.subtract(red_band).divide(red_edge_band.add(red_band)).rename('NDCI')
+
+    # Calculate NDWI
+    ndwi = green_band.subtract(nir_band).divide(green_band.add(nir_band)).rename('NDWI')
+
+    # Calculate NDVI
+    ndvi = nir_band.subtract(red_band).divide(nir_band.add(red_band)).rename('NDVI')
+
+    return image.addBands([ndci, ndwi, ndvi])
+
+# Filter the Sentinel-2 collection.
+sentinel2 = ee.ImageCollection('COPERNICUS/S2') \
+             .filterBounds(mumbai_aoi) \
+             .filterDate('2023-01-01', '2023-03-31') \
+             .map(calculate_indices)
+
+# Reduce the image collection to get the mean value for each index.
+def reduce_region(image):
+    stats = image.reduceRegion(
+        reducer=ee.Reducer.mean(),
+        geometry=mumbai_aoi,
+        scale=30,
+        maxPixels=1e8,
+        bestEffort=True
+    )
+    return ee.Feature(None, stats).set('date', image.date().format())
+
+# Apply the reduction to the collection.
+indices = sentinel2.map(reduce_region).getInfo()['features']
+
+# Extract dates and values for each index.
+dates = [pd.to_datetime(feature['properties']['date']) for feature in indices]
+ndci_values = [feature['properties']['NDCI'] for feature in indices]
+ndwi_values = [feature['properties']['NDWI'] for feature in indices]
+ndvi_values = [feature['properties']['NDVI'] for feature in indices]
+
+# Create a DataFrame.
+df = pd.DataFrame({
+    'Date': dates,
+    'NDCI': ndci_values,
+    'NDWI': ndwi_values,
+    'NDVI': ndvi_values
+})
+
+# Plot the data.
+plt.figure(figsize=(14, 7))
+
+plt.subplot(3, 1, 1) #3 rows, 1 column, 1st position
+plt.plot(df['Date'], df['NDCI'], label='NDCI') #Normalized Difference Chlorophyll Index
+plt.ylabel('NDCI')
+plt.legend()
+
+plt.subplot(3, 1, 2)
+plt.plot(df['Date'], df['NDWI'], label='NDWI', color='orange') #Normalized Difference Water Index
+plt.ylabel('NDWI')
+plt.legend()
+
+plt.subplot(3, 1, 3)
+plt.plot(df['Date'], df['NDVI'], label='NDVI', color='green') #Normalized Difference Vegetation Index
+plt.xlabel('Date')
+plt.ylabel('NDVI')
+plt.legend()
+
+plt.suptitle('Indices over Time')
+plt.tight_layout()
+plt.show()
+
+import ee
+import folium
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Initialize the Earth Engine module.
+ee.Initialize()
+
+aoi = ee.Geometry.Rectangle([72.775, 18.875, 72.985, 19.255])  # Example: Mumbai coastline
+
+# Function to add Earth Engine layers to the folium map.
+def add_ee_layer(self, ee_image_object, vis_params, name):
+    map_id_dict = ee.Image(ee_image_object).getMapId(vis_params)
+    folium.raster_layers.TileLayer(
+        tiles=map_id_dict['tile_fetcher'].url_format,
+        attr='Map Data © Google Earth Engine',
+        name=name,
+        overlay=True,
+        control=True
+    ).add_to(self)
+
+# Add the EE drawing method to folium.
+folium.Map.add_ee_layer = add_ee_layer
+
+# Filter the Sentinel-2 collection.
+sentinel2 = ee.ImageCollection('COPERNICUS/S2') \
+             .filterBounds(aoi) \
+             .filterDate('2023-01-01', '2023-12-31') \
+             .sort('CLOUD_COVER')
+
+# Function to calculate FDI.
+def calc_fdi(image):
+    nir_band = image.select('B8')
+    swir1_band = image.select('B11')
+
+    fdi = nir_band.subtract(swir1_band).rename('FDI')
+
+    return image.addBands(fdi)
+
+# Calculate FDI for the collection.
+fdi_collection = sentinel2.map(calc_fdi).select(['FDI'])
+
+# Function to extract FDI values over time.
+def extract_fdi_values(image):
+    mean_dict = image.reduceRegion(
+        reducer=ee.Reducer.mean(),
+        geometry=aoi,
+        scale=30,
+        maxPixels=1e8,  # Increase maxPixels
+        bestEffort=True  # Enable bestEffort
+    )
+    return ee.Feature(None, mean_dict.set('date', image.date().format()))
+
+# Extract FDI values over time.
+fdi_over_time = fdi_collection.map(extract_fdi_values).getInfo()
+
+# Convert extracted data to a pandas DataFrame.
+data = []
+for feature in fdi_over_time['features']:
+    properties = feature['properties']
+    data.append([properties['date'], properties.get('FDI', None)])
+
+df_fdi = pd.DataFrame(data, columns=['Date', 'FDI'])
+df_fdi['Date'] = pd.to_datetime(df_fdi['Date'])
+
+# Plot FDI over time.
+plt.figure(figsize=(14, 7))
+plt.plot(df_fdi['Date'], df_fdi['FDI'], label='FDI')
+plt.xlabel('Date')
+plt.ylabel('FDI Value')
+plt.title('Floating Debris Index (FDI) Over Time')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# Visualize the FDI on a map.
+image = fdi_collection.first()
+fdi_image = image.select('FDI')
+
+map_fdi = folium.Map(location=[19.0760, 72.8777], zoom_start=12)
+map_fdi.add_ee_layer(fdi_image, {'min': -1, 'max': 1, 'palette': ['blue', 'white', 'red']}, 'FDI')
+map_fdi.add_child(folium.LayerControl())
+map_fdi!pip install mysql-connector-python
+import mysql.connector
+
+def push_to_db(data):
+    connection = mysql.connector.connect(
+        host="localhost",
+        user="root",
+        password="Moltenlava$2",
+        database="marinedb"
+    )
+
+    cursor = connection.cursor()
+    for row in data:
+        cursor.execute("INSERT INTO sentinel_data (date, ndvi, ndwi, ndci) VALUES (%s, %s, %s, %s)", row)
+    connection.commit()
+    cursor.close()
+    connection.close()
+
+data = [
+    ('2024-08-01', 0.3, 0.4, 0.2),
+    ('2024-08-02', 0.32, 0.42, 0.22)
+]
+push_to_db(data)
